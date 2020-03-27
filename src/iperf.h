@@ -352,6 +352,9 @@ struct iperf_test
     char *server_output_text;
     cJSON *json_server_output;
 
+    /*	Store User Defined Path and use it for creating temporary streams	*/
+    char *user_stream_path;
+
     /* Server output (use on server side only) */
     TAILQ_HEAD(iperf_textlisthead, iperf_textline) server_output_list;
 

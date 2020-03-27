@@ -74,6 +74,9 @@ struct iperf_time;
 #define OPT_EXTRA_DATA 19
 #define OPT_BIDIRECTIONAL 20
 
+/*	Stream Path Edit for Android Compatibility	*/
+#define OPT_STREAM_PATH 21
+
 /* states */
 #define TEST_START 1
 #define TEST_RUNNING 2
@@ -128,6 +131,10 @@ int iperf_get_test_tos( struct iperf_test* ipt );
 char*	iperf_get_extra_data( struct iperf_test* ipt );
 char*	iperf_get_iperf_version(void);
 int	iperf_get_test_no_delay( struct iperf_test* ipt );
+/*	Getter routine for user-defined stream-path	*/
+char* iperf_get_stream_path( struct iperf_test *ipt );
+/*	Setter routine for user-defined stream-path	*/
+void iperf_set_stream_path( struct iperf_test *ipt, char *_stram_path );
 
 /* Setter routines for some fields inside iperf_test. */
 void	iperf_set_verbose( struct iperf_test* ipt, int verbose );
