@@ -59,6 +59,7 @@ typedef uint64_t iperf_size_t;
 #define DEFAULT_PACING_TIMER 1000
 #define DEFAULT_NO_MSG_RCVD_TIMEOUT 120000
 #define MIN_NO_MSG_RCVD_TIMEOUT 100
+#define DEFAULT_EXEC_SERVER_CONNECT_TIMEOUT 30000   /* [ms] */
 
 /* short option equivalents, used to support options that only have long form */
 #define OPT_SCTP 1
@@ -87,6 +88,8 @@ typedef uint64_t iperf_size_t;
 #define OPT_IDLE_TIMEOUT 25
 #define OPT_DONT_FRAGMENT 26
 #define OPT_RCV_TIMEOUT 27
+#define OPT_MAX_SERVERS 28
+#define OPT_SERVER_TEST_NUMBER 29
 
 /* states */
 #define TEST_START 1
@@ -105,8 +108,18 @@ typedef uint64_t iperf_size_t;
 #define DISPLAY_RESULTS 14
 #define IPERF_START 15
 #define IPERF_DONE 16
+
+#define CONTROL_PORT_MIN 64
+#define CONTROL_PORT_MAX 127
+
 #define ACCESS_DENIED (-1)
 #define SERVER_ERROR (-2)
+
+#define SERVERS_NUM_EXCEEDED (-11)
+#define PORT_NUMBER_NOT_IN_LIMITS (-12)
+#define TOO_MANY_OPTIONS_FOR_NEW_PROCESS (-13)
+#define FORK_SERVER_FAILED (-14)
+#define FAILED_STARTING_NEW_SERVER (-15)
 
 /* Getter routines for some fields inside iperf_test. */
 int	iperf_get_verbose( struct iperf_test* ipt );
@@ -378,6 +391,9 @@ enum {
     IEIDLETIMEOUT = 30,     // Invalid value specified as idle state timeout
     IERCVTIMEOUT = 31,      // Illegal message receive timeout
     IERVRSONLYRCVTIMEOUT = 32,  // Client receive timeout is valid only in reverse mode
+    IEMAXSERVERS = 33,      // Maximum number of servers servers is too high
+    IETESTNUMBER = 34,      // Starting server test number - 0 is minimum (Not for manual use)
+
     /* Test errors */
     IENEWTEST = 100,        // Unable to create a new test (check perror)
     IEINITTEST = 101,       // Test initialization failed (check perror)
@@ -425,6 +441,13 @@ enum {
     IEBINDDEV = 143,        // Unable to bind-to-device (check perror, maybe permissions?)
     IENOMSG = 144,          // No message was received for NO_MSG_RCVD_TIMEOUT time period
     IESETDONTFRAGMENT = 145,    // Unable to set IP Do-Not-Fragment
+    IECLIENTEXEC = 146,     // unable to execute new client process
+    IESERVEREXEC = 147,     // unable to execute new server process
+    IESERVERSNUMEXCEEDED =148,       // all servers are busy running a test. try again later
+    IEPORTNUMNOTINLIMITS = 149,      // internal server error when determining available port number. try again later
+    IETOOMANYSERVEROPTIONS = 150,    //internal server error - too many options for new server"
+    IEFORKSERVERFAILED = 151,        // internal server error - failed to fork new server. try again later
+    IEFAILEDSTARTINGNEWSERVER = 152, // internal server error - failed to start new server. try again later
     /* Stream errors */
     IECREATESTREAM = 200,   // Unable to create a new stream (check herror/perror)
     IEINITSTREAM = 201,     // Unable to initialize stream (check herror/perror)

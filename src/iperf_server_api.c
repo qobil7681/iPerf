@@ -37,6 +37,7 @@
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -69,6 +70,9 @@
 int
 iperf_server_listen(struct iperf_test *test)
 {
+    pid_t pid;
+    char pid_str[128];
+
     retry:
     if((test->listener = netannounce(test->settings->domain, Ptcp, test->bind_address, test->bind_dev, test->server_port)) < 0) {
 	if (errno == EAFNOSUPPORT && (test->settings->domain == AF_INET6 || test->settings->domain == AF_UNSPEC)) {
@@ -90,8 +94,14 @@ iperf_server_listen(struct iperf_test *test)
         if (test->server_last_run_rc != 2)
             test->server_test_number +=1;
         if (test->debug || test->server_last_run_rc != 2) {
-	    iperf_printf(test, "-----------------------------------------------------------\n");
-	    iperf_printf(test, "Server listening on %d (test #%d)\n", test->server_port, test->server_test_number);
+            if (test->settings->max_servers > 1) {
+                    pid = getpid();
+                    sprintf(pid_str, "[%d]", pid);
+            } else {
+                    pid_str[0] = '\0';
+            }
+            iperf_printf(test, "-----------------------------------------------------------\n");
+            iperf_printf(test, "Server%s listening on %d (test #%d)\n", pid_str, test->server_port, test->server_test_number);
 	    iperf_printf(test, "-----------------------------------------------------------\n");
 	    if (test->forceflush)
 	        iflush(test);
@@ -105,6 +115,140 @@ iperf_server_listen(struct iperf_test *test)
 
     return 0;
 }
+
+static void
+cleanup_server(struct iperf_test *test)
+{
+    struct iperf_stream *sp;
+
+    /* Close open streams */
+    SLIST_FOREACH(sp, &test->streams, streams) {
+	FD_CLR(sp->socket, &test->read_set);
+	FD_CLR(sp->socket, &test->write_set);
+	close(sp->socket);
+    }
+
+    /* Close open test sockets */
+    if (test->ctrl_sck) {
+	close(test->ctrl_sck);
+    }
+    if (test->listener) {
+	close(test->listener);
+    }
+
+    /* Cancel any remaining timers. */
+    if (test->stats_timer != NULL) {
+	tmr_cancel(test->stats_timer);
+	test->stats_timer = NULL;
+    }
+    if (test->reporter_timer != NULL) {
+	tmr_cancel(test->reporter_timer);
+	test->reporter_timer = NULL;
+    }
+    if (test->omit_timer != NULL) {
+	tmr_cancel(test->omit_timer);
+	test->omit_timer = NULL;
+    }
+    if (test->congestion_used != NULL) {
+        free(test->congestion_used);
+	test->congestion_used = NULL;
+    }
+    if (test->timer != NULL) {
+        tmr_cancel(test->timer);
+        test->timer = NULL;
+    }
+}
+
+
+/*
+ * Starting new copy of the server with new port number
+*/
+int
+iperf_start_new_server(struct iperf_test *test)
+{
+    #define MAX_ARGS 100
+    char *argv[MAX_ARGS];
+    int argc = test->argc;
+
+    #define port_str_max_size 10
+    #define test_num_str_max_size 20
+    #define connect_timeout_str_max_size 15
+    char port_str[port_str_max_size + 1];
+    char test_num_str[test_num_str_max_size + 1];
+    char connect_timeout_str[connect_timeout_str_max_size + 1];
+    int port;
+    int port_offset;
+    int pid;
+    int i;
+    int process_status;
+
+    // Return if only this server is allowed
+    if (test->settings->max_servers <= 1 || test->servers_list == NULL)
+        return -1;
+
+    // Find avilable port for the new server (skip first entry which is for this server)
+    for (port_offset = 1; port_offset < test->settings->max_servers; port_offset++) {
+        if (test->servers_list[port_offset] == 0)      // No server is using the port
+            break;
+        else {
+            pid = waitpid(test->servers_list[port_offset], &process_status, WNOHANG);
+            if (pid > 0 || (pid == -1 && errno == ECHILD)) {
+                // Old process using the port already terminatted
+                test->servers_list[port_offset] = 0;
+                break;
+            }
+        }
+    }
+
+    // Return if no available port was found
+    if (port_offset >= test->settings->max_servers)
+        return SERVERS_NUM_EXCEEDED;
+
+    port = port_offset + test->server_port;      // Set the actual port number to be used
+    if (port < 1 || port > 999999)   // Port number not appropriate for port_str
+        return PORT_NUMBER_NOT_IN_LIMITS;
+
+    snprintf(port_str, port_str_max_size, "%d", port);
+    snprintf(test_num_str, test_num_str_max_size, "%d", test->server_test_number);
+    snprintf(connect_timeout_str, connect_timeout_str_max_size, "%d", test->settings->exec_server_connect_timeout);
+
+    // Copy original parameters
+    // NOTE: assuming argv[0] process path if full-path or in PATH
+    if (argc + 12 > MAX_ARGS)   // Too many arguments
+        return TOO_MANY_OPTIONS_FOR_NEW_PROCESS;
+    for (i = 0; i < argc; argv[i] = test->argv[i], i++);
+
+    argv[argc++] = "--max-servers";
+    argv[argc++] = "1";
+    argv[argc++] = "--one-off";
+    argv[argc++] = "--connect-timeout";
+    argv[argc++] = connect_timeout_str;
+    argv[argc++] = "--server-test-number";
+    argv[argc++] = test_num_str;
+    argv[argc++] = "-p";
+    argv[argc++] = port_str;
+
+    argv[argc] = NULL;  // Terminating list of arguments
+
+    // Executing the new server
+    signal(SIGCHLD, SIG_IGN);   // Child will not become a zombie when terminating
+    pid = fork();
+    if (pid < 0)            // Error
+        return FORK_SERVER_FAILED;
+    else if (pid == 0) {    // Child - start new server
+        cleanup_server(test);   /* Close all connections before restarting new server */
+        execv(argv[0], argv);
+        iperf_err(test, "Starting new Server failed - %s", iperf_strerror(IESERVEREXEC));
+        return FAILED_STARTING_NEW_SERVER;          // If `exec returned` it means that it failed
+    }
+
+    /* Parent */
+    test->servers_list[port_offset] = pid;      // Save new server's info
+    iperf_printf(test, "New server started - port=%d, pid=%d\n", port, pid);
+    test->server_test_number +=1;               // Count also child tests
+    return port;
+}
+
 
 int
 iperf_accept(struct iperf_test *test)
@@ -146,11 +290,31 @@ iperf_accept(struct iperf_test *test)
 		return -1;
         if (test->on_connect)
             test->on_connect(test);
-    } else {
-	/*
+    } else if (test->settings->max_servers <= 1) {      // Return if only one server is allowed
+        /*
 	 * Don't try to read from the socket.  It could block an ongoing test. 
 	 * Just send ACCESS_DENIED.
 	 */
+        if (Nwrite(s, (char*) &rbuf, sizeof(rbuf), Ptcp) < 0) {
+            i_errno = IESENDMESSAGE;
+            return -1;
+        }
+        close(s);
+    } else {
+        /* As this server is busy -
+         * try to run another server and redirect the client to it.
+        */
+        int port;
+        port = iperf_start_new_server(test);
+        if (port > test->server_port) 
+            rbuf = CONTROL_PORT_MIN + (port - test->server_port);
+        else if (port < 0)        // Specific error condition was set
+            rbuf = port;
+        /*
+        * If test is ongoing and started new server - redirect the client to it.
+        * Otherwise, don't try to read from the socket.
+        * It could block an ongoing test. Just send ACCESS_DENIED.
+        */
         if (Nwrite(s, (char*) &rbuf, sizeof(rbuf), Ptcp) < 0) {
             i_errno = IESENDMESSAGE;
             return -1;
@@ -276,6 +440,13 @@ server_reporter_timer_proc(TimerClientData client_data, struct iperf_time *nowP)
 	test->reporter_callback(test);
 }
 
+// Dummy time procedures for cases were other service times out (e.g. select()
+static void
+server_dummy_timer_proc(TimerClientData client_data, struct iperf_time *nowP)
+{
+    return;
+}
+
 static int
 create_server_timers(struct iperf_test * test)
 {
@@ -362,52 +533,6 @@ create_server_omit_timer(struct iperf_test * test)
     return 0;
 }
 
-static void
-cleanup_server(struct iperf_test *test)
-{
-    struct iperf_stream *sp;
-
-    /* Close open streams */
-    SLIST_FOREACH(sp, &test->streams, streams) {
-	FD_CLR(sp->socket, &test->read_set);
-	FD_CLR(sp->socket, &test->write_set);
-	close(sp->socket);
-    }
-
-    /* Close open test sockets */
-    if (test->ctrl_sck) {
-	close(test->ctrl_sck);
-    }
-    if (test->listener) {
-	close(test->listener);
-    }
-    if (test->prot_listener > -1) {     // May remain open if create socket failed
-	close(test->prot_listener);
-    }
-
-    /* Cancel any remaining timers. */
-    if (test->stats_timer != NULL) {
-	tmr_cancel(test->stats_timer);
-	test->stats_timer = NULL;
-    }
-    if (test->reporter_timer != NULL) {
-	tmr_cancel(test->reporter_timer);
-	test->reporter_timer = NULL;
-    }
-    if (test->omit_timer != NULL) {
-	tmr_cancel(test->omit_timer);
-	test->omit_timer = NULL;
-    }
-    if (test->congestion_used != NULL) {
-        free(test->congestion_used);
-	test->congestion_used = NULL;
-    }
-    if (test->timer != NULL) {
-        tmr_cancel(test->timer);
-        test->timer = NULL;
-    }
-}
-
 
 int
 iperf_run_server(struct iperf_test *test)
@@ -429,6 +554,10 @@ iperf_run_server(struct iperf_test *test)
     int64_t t_usecs;
     int64_t timeout_us;
     int64_t rcv_timeout_us;
+    int first_select;
+    int i;
+
+    static int *servers_list = NULL;   // Allocate servers list array only once
 
     if (test->logfile)
         if (iperf_open_logfile(test) < 0)
@@ -458,11 +587,37 @@ iperf_run_server(struct iperf_test *test)
     }
 
     iperf_time_now(&last_receive_time); // Initialize last time something was received
+    // Allocate memory for parallel servers PIDs (if not allocated already) and clean it
+    if (test->settings->max_servers > 0) {
+        if (servers_list == NULL) {
+            servers_list = malloc(test->settings->max_servers * sizeof(int));
+            if (servers_list == NULL)
+                return -2;
+            for (i = 0; i < test->settings->max_servers; servers_list[i] = 0, i++);
+        }
+    }
+    test->servers_list = servers_list;
+
+    // Begin calculating CPU utilization
+    cpu_util(NULL);
 
     test->state = IPERF_START;
     send_streams_accepted = 0;
     rec_streams_accepted = 0;
     rcv_timeout_us = (test->settings->rcv_timeout.secs * SEC_TO_US) + test->settings->rcv_timeout.usecs;
+
+    if (test->settings->connect_timeout > 0) {
+        // Create timer to limit the wait time for first client connection
+        TimerClientData cd;
+        cd.p = test;
+        iperf_time_now(&now);
+        if (tmr_create(&now, server_dummy_timer_proc, cd, test->settings->connect_timeout * mS_TO_US, 0)  == NULL) {
+            i_errno = IEINITTEST;
+            return -1;
+	}
+    }
+
+    first_select = 1;
 
     while (test->state != IPERF_DONE) {
 
@@ -527,7 +682,8 @@ iperf_run_server(struct iperf_test *test)
                     test->server_forced_no_msg_restarts_count += 1;
                     i_errno = IENOMSG;
                     if (iperf_get_verbose(test))
-                        iperf_err(test, "Server restart (#%d) during active test due to idle data for receiving data",
+                        iperf_err(test,
+                                  "Server restart (#%d) during active test due to idle data for receiving data",
                                   test->server_forced_no_msg_restarts_count);
                     cleanup_server(test);
                     return -1;
@@ -535,6 +691,12 @@ iperf_run_server(struct iperf_test *test)
 
             }
         }
+
+        // If waiting for first client connection timed out - exit */
+        if (result == 0 && test->settings->connect_timeout > 0 && first_select == 1)
+            iperf_errexit(test, "Server timed out after waiting %d ms for client connection", test->settings->connect_timeout);
+
+        first_select = 0;
 
 	if (result > 0) {
             iperf_time_now(&last_receive_time);
@@ -571,71 +733,71 @@ iperf_run_server(struct iperf_test *test)
                 if (FD_ISSET(test->prot_listener, &read_set)) {
     
                     if ((s = test->protocol->accept(test)) < 0) {
-			cleanup_server(test);
+			            cleanup_server(test);
                         return -1;
-		    }
-
-#if defined(HAVE_TCP_CONGESTION)
-		    if (test->protocol->id == Ptcp) {
-			if (test->congestion) {
-			    if (setsockopt(s, IPPROTO_TCP, TCP_CONGESTION, test->congestion, strlen(test->congestion)) < 0) {
-				/*
-				 * ENOENT means we tried to set the
-				 * congestion algorithm but the algorithm
-				 * specified doesn't exist.  This can happen
-				 * if the client and server have different
-				 * congestion algorithms available.  In this
-				 * case, print a warning, but otherwise
-				 * continue.
-				 */
-				if (errno == ENOENT) {
-				    warning("TCP congestion control algorithm not supported");
-				}
-				else {
-				    saved_errno = errno;
-				    close(s);
-				    cleanup_server(test);
-				    errno = saved_errno;
-				    i_errno = IESETCONGESTION;
-				    return -1;
-				}
-			    } 
-			}
-			{
-			    socklen_t len = TCP_CA_NAME_MAX;
-			    char ca[TCP_CA_NAME_MAX + 1];
-                            int rc;
-			    rc = getsockopt(s, IPPROTO_TCP, TCP_CONGESTION, ca, &len);
-                            if (rc < 0 && test->congestion) {
-				saved_errno = errno;
-				close(s);
-				cleanup_server(test);
-				errno = saved_errno;
-				i_errno = IESETCONGESTION;
-				return -1;
-			    }
-                            /* 
-                             * If not the first connection, discard prior
-                             * congestion algorithm name so we don't leak
-                             * duplicated strings.  We probably don't need
-                             * the old string anyway.
-                             */
-                            if (test->congestion_used != NULL) {
-                                free(test->congestion_used);
-                            }
-                            // Set actual used congestion alg, or set to unknown if could not get it
-                            if (rc < 0)
-                                test->congestion_used = strdup("unknown");
-                            else
-                                test->congestion_used = strdup(ca);
-			    if (test->debug) {
-				printf("Congestion algorithm is %s\n", test->congestion_used);
-			    }
-			}
-		    }
-#endif /* HAVE_TCP_CONGESTION */
+		            }
 
                     if (!is_closed(s)) {
+
+#if defined(HAVE_TCP_CONGESTION)
+                        if (test->protocol->id == Ptcp) {
+                            if (test->congestion) {
+                                if (setsockopt(s, IPPROTO_TCP, TCP_CONGESTION, test->congestion, strlen(test->congestion)) < 0) {
+                                /*
+                                * ENOENT means we tried to set the
+                                * congestion algorithm but the algorithm
+                                * specified doesn't exist.  This can happen
+                                * if the client and server have different
+                                * congestion algorithms available.  In this
+                                * case, print a warning, but otherwise
+                                * continue.
+                                */
+                                if (errno == ENOENT) {
+                                    warning("TCP congestion control algorithm not supported");
+                                }
+                                else {
+                                    saved_errno = errno;
+                                    close(s);
+                                    cleanup_server(test);
+                                    errno = saved_errno;
+                                    i_errno = IESETCONGESTION;
+                                    return -1;
+                                }
+                                } 
+                            }
+                            {
+                                socklen_t len = TCP_CA_NAME_MAX;
+                                char ca[TCP_CA_NAME_MAX + 1];
+                                            int rc;
+                                rc = getsockopt(s, IPPROTO_TCP, TCP_CONGESTION, ca, &len);
+                                            if (rc < 0 && test->congestion) {
+                                saved_errno = errno;
+                                close(s);
+                                cleanup_server(test);
+                                errno = saved_errno;
+                                i_errno = IESETCONGESTION;
+                                return -1;
+                                }
+                                            /* 
+                                            * If not the first connection, discard prior
+                                            * congestion algorithm name so we don't leak
+                                            * duplicated strings.  We probably don't need
+                                            * the old string anyway.
+                                            */
+                                            if (test->congestion_used != NULL) {
+                                                free(test->congestion_used);
+                                            }
+                                            // Set actual used congestion alg, or set to unknown if could not get it
+                                            if (rc < 0)
+                                                test->congestion_used = strdup("unknown");
+                                            else
+                                                test->congestion_used = strdup(ca);
+                                if (test->debug) {
+                                printf("Congestion algorithm is %s\n", test->congestion_used);
+                                }
+                            }
+                        }
+#endif /* HAVE_TCP_CONGESTION */
 
                         if (rec_streams_accepted != streams_to_rec) {
                             flag = 0;
@@ -660,11 +822,11 @@ iperf_run_server(struct iperf_test *test)
                             if (s > test->max_fd) test->max_fd = s;
 
                             /*
-                             * If the protocol isn't UDP, or even if it is but
-                             * we're the receiver, set nonblocking sockets.
-                             * We need this to allow a server receiver to
-                             * maintain interactivity with the control channel.
-                             */
+                            * If the protocol isn't UDP, or even if it is but
+                            * we're the receiver, set nonblocking sockets.
+                            * We need this to allow a server receiver to
+                            * maintain interactivity with the control channel.
+                            */
                             if (test->protocol->id != Pudp ||
                                 !sp->sender) {
                                 setnonblocking(s, 1);
