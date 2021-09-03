@@ -100,11 +100,10 @@ submit an issue.  Please use one of the mailing lists for that.
 Relation to iperf 2.x
 ---------------------
 
-Note that iperf2 is no longer being developed by its original
-maintainers.  However, beginning in 2014, another developer began
-fixing bugs and enhancing functionality, and generating releases of
-iperf2.  Both projects (as of late 2017) are currently being developed
-actively, but independently.  The continuing iperf2 development
+Although iperf2 and iperf3 both measure network performance,
+they are not compatible with each other.
+The projects (as of mid-2021) are in active, but separate, development.
+The continuing iperf2 development
 project can be found at https://sourceforge.net/projects/iperf2/.
 
 iperf3 contains a number of options and functions not present in
@@ -149,7 +148,7 @@ responsibility for the content of these pages.
 Copyright
 ---------
 
-iperf, Copyright (c) 2014-2020, The Regents of the University of
+iperf, Copyright (c) 2014-2021, The Regents of the University of
 California, through Lawrence Berkeley National Laboratory (subject
 to receipt of any required approvals from the U.S. Dept. of
 Energy).  All rights reserved.

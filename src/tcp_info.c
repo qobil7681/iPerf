@@ -95,7 +95,7 @@ void
 save_tcpinfo(struct iperf_stream *sp, struct iperf_interval_results *irp)
 {
 #if (defined(linux) || defined(__FreeBSD__) || defined(__NetBSD__)) && \
-	defined(TCP_INFO)/*DBO >>> */ && 0 /*<<<DBO*/
+	defined(TCP_INFO)
     socklen_t tcp_info_length = sizeof(struct tcp_info);
 
     if (getsockopt(sp->socket, IPPROTO_TCP, TCP_INFO, (void *)&irp->tcpInfo, &tcp_info_length) < 0)
@@ -138,6 +138,26 @@ get_snd_cwnd(struct iperf_interval_results *irp)
     return irp->tcpInfo.tcpi_snd_cwnd;
 #elif defined(__NetBSD__) && defined(TCP_INFO)
     return irp->tcpInfo.tcpi_snd_cwnd * irp->tcpInfo.tcpi_snd_mss;
+#else
+    return -1;
+#endif
+}
+
+/*************************************************************/
+/*
+ * Return snd_wnd in octets.
+ */
+long
+get_snd_wnd(struct iperf_interval_results *irp)
+{
+#if !defined(HAVE_TCP_INFO_SND_WND)
+    return -1;
+#elif defined(linux) && defined(TCP_MD5SIG)
+    return irp->tcpInfo.tcpi_snd_wnd;
+#elif defined(__FreeBSD__) && __FreeBSD_version >= 600000
+    return irp->tcpInfo.tcpi_snd_wnd;
+#elif defined(__NetBSD__) && defined(TCP_INFO)
+    return irp->tcpInfo.tcpi_snd_wnd * irp->tcpInfo.tcpi_snd_mss;
 #else
     return -1;
 #endif
