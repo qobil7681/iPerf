@@ -185,7 +185,11 @@ const char usage_longstr[] = "Usage: iperf3 [-s|-c host] [options]\n"
 #if defined(HAVE_FLOWLABEL)
                            "  -L, --flowlabel N         set the IPv6 flow label (only supported on Linux)\n"
 #endif /* HAVE_FLOWLABEL */
-                           "  -Z, --zerocopy            use a 'zero copy' method of sending data\n"
+                           "  -Z, --zerocopy            TCP: use a 'zero copy' method of sending data\n"
+#if defined(HAVE_SENDMMSG)
+                           "                            UDP: use `sendmmsg` to send `-b` bust number of messages;\n"
+                           "                                 (not supported when reading from a file).\n"
+#endif /* HAVE_SENDMMSG */
                            "  -O, --omit N              omit the first n seconds\n"
                            "  -T, --title str           prefix every output line with this string\n"
                            "  --extra-data str          data string to include in client and server JSON\n"
