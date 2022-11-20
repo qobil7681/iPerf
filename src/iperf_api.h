@@ -90,6 +90,7 @@ typedef uint64_t iperf_size_t;
 #define OPT_DONT_FRAGMENT 26
 #define OPT_RCV_TIMEOUT 27
 #define OPT_SND_TIMEOUT 28
+#define OPT_CNTL_KA 29
 
 /* states */
 #define TEST_START 1
@@ -401,6 +402,7 @@ enum {
     IERCVTIMEOUT = 31,      // Illegal message receive timeout
     IERVRSONLYRCVTIMEOUT = 32,  // Client receive timeout is valid only in reverse mode
     IESNDTIMEOUT = 33,      // Illegal message send timeout
+    IECNTLKA = 34,          // Control connection Keepalive period should be larger than retry period (interval * count)
     /* Test errors */
     IENEWTEST = 100,        // Unable to create a new test (check perror)
     IEINITTEST = 101,       // Test initialization failed (check perror)
@@ -451,6 +453,10 @@ enum {
     IEBINDDEVNOSUPPORT = 146,  // `ip%%dev` is not supported as system does not support bind to device
     IEHOSTDEV = 147,        // host device name (ip%%<dev>) is supported (and required) only for IPv6 link-local address
     IESETUSERTIMEOUT = 148, // Unable to set TCP USER_TIMEOUT (check perror)
+    IESETCNTLKA = 149,         // Unable to set socket keepalive (SO_KEEPALIVE) option
+    IESETCNTLKAKEEPIDLE = 150, // Unable to set socket keepalive TCP period (TCP_KEEPIDLE) option
+    IESETCNTLKAINTERVAL = 151, // Unable to set/get socket keepalive TCP retry interval (TCP_KEEPINTVL) option
+    IESETCNTLKACOUNT = 152,    // Unable to set/get socket keepalive TCP number of retries (TCP_KEEPCNT) option
     /* Stream errors */
     IECREATESTREAM = 200,   // Unable to create a new stream (check herror/perror)
     IEINITSTREAM = 201,     // Unable to initialize stream (check herror/perror)
