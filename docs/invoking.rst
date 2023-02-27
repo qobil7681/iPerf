@@ -375,6 +375,14 @@ the executable.
                  set the IP type of service. The usual prefixes for octal and hex
                  can be used, i.e. 52, 064 and 0x34 all specify the same value.
    
+          --sock-prio n
+		 Set the protocol-defined priority for all packets to be sent
+		 on this socket.  Linux uses this value to order the networking
+		 queues: packets with a higher priority may be processed first
+		 depending on the selected device queueing discipline.  Setting
+		 a priority outside the range 0 to 6 requires the CAP_NET_ADMIN
+		 capability
+   
           --dscp dscp
                  set  the  IP  DSCP  bits.   Both numeric and symbolic values are
                  accepted. Numeric values can be specified in decimal, octal  and

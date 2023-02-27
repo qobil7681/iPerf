@@ -90,6 +90,7 @@ typedef uint64_t iperf_size_t;
 #define OPT_DONT_FRAGMENT 26
 #define OPT_RCV_TIMEOUT 27
 #define OPT_SND_TIMEOUT 28
+#define OPT_SOCK_PRIO 29
 
 /* states */
 #define TEST_START 1
@@ -406,6 +407,7 @@ enum {
     IERVRSONLYRCVTIMEOUT = 32,  // Client receive timeout is valid only in reverse mode
     IESNDTIMEOUT = 33,      // Illegal message send timeout
     IEUDPFILETRANSFER = 34, // Cannot transfer file using UDP
+    IEBADSOPRIO = 35,	    // Bad socket priority value
     /* Test errors */
     IENEWTEST = 100,        // Unable to create a new test (check perror)
     IEINITTEST = 101,       // Test initialization failed (check perror)
@@ -456,6 +458,7 @@ enum {
     IEBINDDEVNOSUPPORT = 146,  // `ip%%dev` is not supported as system does not support bind to device
     IEHOSTDEV = 147,        // host device name (ip%%<dev>) is supported (and required) only for IPv6 link-local address
     IESETUSERTIMEOUT = 148, // Unable to set TCP USER_TIMEOUT (check perror)
+    IESETSOPRIO = 149,      // Unable to set socket priority (check perror)
     /* Stream errors */
     IECREATESTREAM = 200,   // Unable to create a new stream (check herror/perror)
     IEINITSTREAM = 201,     // Unable to initialize stream (check herror/perror)
