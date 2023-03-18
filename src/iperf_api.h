@@ -293,6 +293,14 @@ void      iperf_free_stream(struct iperf_stream * sp);
  */
 int       iperf_common_sockopts(struct iperf_test *, int s);
 
+#if defined (HAVE_TCP_KEEPALIVE)
+/**
+ * iperf_set_control_keepalive -- set control connection TCP keepalive
+ *
+ */
+int       iperf_set_control_keepalive(struct iperf_test *test);
+#endif //HAVE_TCP_KEEPALIVE
+
 int has_tcpinfo(void);
 int has_tcpinfo_retransmits(void);
 void save_tcpinfo(struct iperf_stream *sp, struct iperf_interval_results *irp);
@@ -402,7 +410,7 @@ enum {
     IERCVTIMEOUT = 31,      // Illegal message receive timeout
     IERVRSONLYRCVTIMEOUT = 32,  // Client receive timeout is valid only in reverse mode
     IESNDTIMEOUT = 33,      // Illegal message send timeout
-    IECNTLKA = 34,          // Control connection Keepalive period should be larger than retry period (interval * count)
+    IECNTLKA = 34,          // Control connection Keepalive period should be larger than the full retry period (interval * count)
     /* Test errors */
     IENEWTEST = 100,        // Unable to create a new test (check perror)
     IEINITTEST = 101,       // Test initialization failed (check perror)

@@ -364,9 +364,6 @@ iperf_connect(struct iperf_test *test)
 {
     int opt;
     socklen_t len;
-#if defined(HAVE_TCP_KEEPALIVE)
-    int kainterval, kacount;
-#endif /* HAVE_TCP_KEEPALIVE */
 
     if (NULL == test)
     {
@@ -395,74 +392,9 @@ iperf_connect(struct iperf_test *test)
     }
 
 #if defined (HAVE_TCP_KEEPALIVE)
-    // Set Control Connection TCP Keepalive (especially useful for long UDP test sessions)
-    if (test->settings->cntl_ka) {
-        opt = 1;
-        if (setsockopt(test->ctrl_sck, SOL_SOCKET, SO_KEEPALIVE, (char *) &opt, sizeof(opt))) {
-            i_errno = IESETCNTLKA;
+        // Set Control Connection TCP Keepalive (especially useful for long UDP test sessions)
+        if (iperf_set_control_keepalive(test) < 0)
             return -1;
-        }
-
-        if ((opt = test->settings->cntl_ka_keepidle)) {
-            if (setsockopt(test->ctrl_sck, IPPROTO_TCP, TCP_KEEPIDLE, (char *) &opt, sizeof(opt))) {
-                i_errno = IESETCNTLKAKEEPIDLE;
-                return -1;
-            }
-        }
-
-        // Seems that at least in Windows WSL2, TCP keepalive retries inteval must be smaller
-        // than keepalive interval.  Otherwise, the keepalive message is sent only once.
-        // To make sure issues will not impact the tests in case the keepalive period was set,
-        // when possible it is made sure that the full keepalive retries interval is less
-        // than the the keepalive period.
-        if (test->settings->cntl_ka_keepidle) {
-            if ((kainterval = test->settings->cntl_ka_interval) == 0) {
-                len = sizeof(kainterval);
-                if (getsockopt(test->ctrl_sck, IPPROTO_TCP, TCP_KEEPINTVL, (char *) &kainterval, &len)) {
-                    i_errno = IESETCNTLKAINTERVAL;
-                    return -1;
-                }
-            }
-            if ((kacount = test->settings->cntl_ka_count) == 0) {
-                len = sizeof(kacount);
-                if (getsockopt(test->ctrl_sck, IPPROTO_TCP, TCP_KEEPCNT, (char *) &kacount, &len)) {
-                    i_errno = IESETCNTLKACOUNT;
-                    return -1;
-                }
-            }
-
-            if (test->settings->cntl_ka_keepidle <= (kainterval * kacount)) {
-                if (test->settings->cntl_ka_interval > 0 || test->settings->cntl_ka_count > 0) {
-                    i_errno = IECNTLKA;
-                    return -1;
-                }
-                if (kacount > 0) {
-                    test->settings->cntl_ka_interval = ((test->settings->cntl_ka_keepidle - 1) / kacount);
-                    if (test->settings->cntl_ka_interval <= 0) {
-                        test->settings->cntl_ka_interval = 1;
-                    }
-                }
-            }
-        }
-
-        if ((opt = test->settings->cntl_ka_interval)) {
-            if (setsockopt(test->ctrl_sck, IPPROTO_TCP, TCP_KEEPINTVL, (char *) &opt, sizeof(opt))) {
-                i_errno = IESETCNTLKAINTERVAL;
-                return -1;
-            }
-        }
-        if ((opt = test->settings->cntl_ka_count)) {
-            if (setsockopt(test->ctrl_sck, IPPROTO_TCP, TCP_KEEPCNT, (char *) &opt, sizeof(opt))) {
-                i_errno = IESETCNTLKACOUNT;
-                return -1;
-            }
-        }
-
-        if (test->verbose) {
-            printf("Control connection TCP Keepalive TCP_KEEPIDLE/TCP_KEEPINTVL/TCP_KEEPCNT set to %d/%d/%d (0 is system default)\n",
-                   test->settings->cntl_ka_keepidle, test->settings->cntl_ka_interval, test->settings->cntl_ka_count);
-        }
-    }
 #endif //HAVE_TCP_KEEPALIVE
 
 #if defined(HAVE_TCP_USER_TIMEOUT)

@@ -463,7 +463,7 @@ iperf_strerror(int int_errno)
             perr = 1;
             break;
         case IECNTLKA:
-            snprintf(errstr, len, "control connection Keepalive period should be larger than retry period (interval * count)");
+            snprintf(errstr, len, "control connection Keepalive period should be larger than the full retry period (interval * count)");
             perr = 1;
             break;
         case IESETCNTLKA:
