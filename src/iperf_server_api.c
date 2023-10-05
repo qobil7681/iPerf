@@ -146,7 +146,12 @@ iperf_accept(struct iperf_test *test)
             return -1;
 #endif //HAVE_TCP_KEEPALIVE
 
-        if (Nread(test->ctrl_sck, test->cookie, COOKIE_SIZE, Ptcp) < 0) {
+        if (Nread(test->ctrl_sck, test->cookie, COOKIE_SIZE, Ptcp) != COOKIE_SIZE) {
+            /*
+             * Note this error covers both the case of a system error
+             * or the inability to read the correct amount of data
+             * (i.e. timed out).
+             */
             i_errno = IERECVCOOKIE;
             return -1;
         }
