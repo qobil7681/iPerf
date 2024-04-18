@@ -341,6 +341,10 @@ create_server_timers(struct iperf_test * test)
     cd.p = test;
     test->timer = test->stats_timer = test->reporter_timer = NULL;
     if (test->duration != 0 ) {
+        if (test->server_duration > 0 && test->server_duration < test->duration) {
+            test->duration = test->server_duration;
+            grace_period = 0;
+        }
         test->done = 0;
         test->timer = tmr_create(&now, server_timer_proc, cd, (test->duration + test->omit + grace_period) * SEC_TO_US, 0);
         if (test->timer == NULL) {

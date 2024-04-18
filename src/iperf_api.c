@@ -1080,7 +1080,8 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
         {"udp", no_argument, NULL, 'u'},
         {"bitrate", required_argument, NULL, 'b'},
         {"bandwidth", required_argument, NULL, 'b'},
-	{"server-bitrate-limit", required_argument, NULL, OPT_SERVER_BITRATE_LIMIT},
+        {"server-bitrate-limit", required_argument, NULL, OPT_SERVER_BITRATE_LIMIT},
+        {"server-time", required_argument, NULL, OPT_SERVER_TIME},
         {"time", required_argument, NULL, 't'},
         {"bytes", required_argument, NULL, 'n'},
         {"blockcount", required_argument, NULL, 'k'},
@@ -1164,7 +1165,7 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
     int rcv_timeout_in = 0;
 
     blksize = 0;
-    server_flag = client_flag = rate_flag = duration_flag = rcv_timeout_flag = snd_timeout_flag =0;
+    server_flag = client_flag = rate_flag = duration_flag = rcv_timeout_flag = snd_timeout_flag = 0;
 #if defined(HAVE_SSL)
     char *client_username = NULL, *client_rsa_public_key = NULL, *server_rsa_private_key = NULL;
     FILE *ptr_file;
@@ -1312,6 +1313,14 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
 		test->settings->bitrate_limit = unit_atof_rate(optarg);
 		server_flag = 1;
 	        break;
+            case OPT_SERVER_TIME:
+        test->server_duration = atoi(optarg);
+        if (test->server_duration > MAX_TIME || test->server_duration < 0) {
+            i_errno = IEDURATION;
+            return -1;
+        }
+        server_flag = 1;
+        break;
             case 't':
                 test->duration = atoi(optarg);
                 if (test->duration > MAX_TIME || test->duration < 0) {
@@ -2929,6 +2938,7 @@ iperf_defaults(struct iperf_test *testp)
 
     testp->omit = OMIT;
     testp->duration = DURATION;
+    testp->server_duration = -1;
     testp->diskfile_name = (char*) 0;
     testp->affinity = -1;
     testp->server_affinity = -1;

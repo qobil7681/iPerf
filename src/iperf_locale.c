@@ -149,6 +149,8 @@ const char usage_longstr[] = "Usage: iperf3 [-s|-c host] [options]\n"
                            "  --time-skew-threshold     time skew threshold (in seconds) between the server\n"
                            "                            and client during the authentication process\n"
                            "  --use-pkcs1-padding       use pkcs1 padding at your own risk\n"
+                           "  --server-time             time in seconds to transmit for. selected when \n"
+                           "                            value is less than client's duration.\n"
 #endif //HAVE_SSL
                            "Client specific:\n"
                            "  -c, --client <host>[%%<dev>] run in client mode, connecting to <host>\n"
