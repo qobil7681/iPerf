@@ -360,7 +360,7 @@ create_server_timers(struct iperf_test * test)
     if (duration != 0 ) {
         /**
          * The duration of the measurement should only be overridden if it exceeds the duration set by the server or
-         * of no duration is set on the server.
+         * if no duration is set on the server.
          * 
          */
         if (test->server_duration > 0 && test->server_duration < duration) {
