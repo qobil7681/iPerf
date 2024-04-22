@@ -175,8 +175,23 @@ iperf_accept(struct iperf_test *test)
             i_errno = IERECVCOOKIE;
             goto error_handling;
         }
-    FD_SET(test->ctrl_sck, &test->read_set);
-    if (test->ctrl_sck > test->max_fd) test->max_fd = test->ctrl_sck;
+
+        /**
+         * If the server has a value set for the --server-time flag, send it to the client 
+         * so that it can adjust its measurement time accordingly. If the value was not set
+         * via the flag, then the client will see a value of 0, which means that the server
+         * does not have a maximum measurement time.
+         */
+        char server_duration_str[15] = "";
+        sprintf(server_duration_str, "%d", test->server_duration);
+
+        if (Nwrite(test->ctrl_sck, server_duration_str, sizeof(server_duration_str), Ptcp) < 0) {
+            i_errno = IESENDSERVERDURATION;
+            return -1;
+        }
+
+	FD_SET(test->ctrl_sck, &test->read_set);
+	if (test->ctrl_sck > test->max_fd) test->max_fd = test->ctrl_sck;
 
     if (iperf_set_send_state(test, PARAM_EXCHANGE) != 0)
         goto error_handling;
@@ -340,13 +355,20 @@ create_server_timers(struct iperf_test * test)
     }
     cd.p = test;
     test->timer = test->stats_timer = test->reporter_timer = NULL;
-    if (test->duration != 0 ) {
-        if (test->server_duration > 0 && test->server_duration < test->duration) {
-            test->duration = test->server_duration;
-            grace_period = 0;
+
+    int duration = test->duration;
+    if (duration != 0 ) {
+        /**
+         * The duration of the measurement should only be overridden if it exceeds the duration set by the server or
+         * of no duration is set on the server.
+         * 
+         */
+        if (test->server_duration > 0 && test->server_duration < duration) {
+            duration = test->server_duration;
         }
+
         test->done = 0;
-        test->timer = tmr_create(&now, server_timer_proc, cd, (test->duration + test->omit + grace_period) * SEC_TO_US, 0);
+        test->timer = tmr_create(&now, server_timer_proc, cd, (duration + test->omit + grace_period) * SEC_TO_US, 0);
         if (test->timer == NULL) {
             i_errno = IEINITTEST;
             return -1;
