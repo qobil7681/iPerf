@@ -187,7 +187,7 @@ iperf_accept(struct iperf_test *test)
 
         if (Nwrite(test->ctrl_sck, server_duration_str, sizeof(server_duration_str), Ptcp) < 0) {
             i_errno = IESENDSERVERDURATION;
-            return -1;
+            goto error_handling;
         }
 
 	FD_SET(test->ctrl_sck, &test->read_set);
