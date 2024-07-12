@@ -203,14 +203,26 @@ create_client_timers(struct iperf_test * test)
     }
     cd.p = test;
     test->timer = test->stats_timer = test->reporter_timer = NULL;
-    if (test->duration != 0) {
-	test->done = 0;
-        test->timer = tmr_create(&now, test_timer_proc, cd, ( test->duration + test->omit ) * SEC_TO_US, 0);
+
+    int duration = test->duration;
+    if (duration != 0) {
+        /**
+         * The duration of the measurement should only be overridden if it exceeds the duration set by the server or
+         * if no duration is set on the server.
+         * 
+         */
+        if (test->server_duration > 0 && test->server_duration < duration) {
+            duration = test->server_duration;
+        }
+	    
+        test->done = 0;
+        test->timer = tmr_create(&now, test_timer_proc, cd, (duration + test->omit) * SEC_TO_US, 0);
         if (test->timer == NULL) {
             i_errno = IEINITTEST;
             return -1;
-	}
+        }
     }
+
     if (test->stats_interval != 0) {
         test->stats_timer = tmr_create(&now, client_stats_timer_proc, cd, test->stats_interval * SEC_TO_US, 1);
         if (test->stats_timer == NULL) {
@@ -425,6 +437,18 @@ iperf_connect(struct iperf_test *test)
         i_errno = IESENDCOOKIE;
         return -1;
     }
+
+    /**
+     * If the server has a value set for the --server-time flag, the client will read it here and adjust its measurement time accordingly.
+     * If the value is 0, then the measurement will run for the duration that the client has set.
+     */
+    char server_duration_str[15] = "";
+    if (Nread(test->ctrl_sck, server_duration_str, sizeof(server_duration_str), Ptcp) != sizeof(server_duration_str))
+    {
+        i_errno = IERECVSERVERDURATION;
+        return -1;
+    }
+    test->server_duration = atoi(server_duration_str);
 
     FD_SET(test->ctrl_sck, &test->read_set);
     if (test->ctrl_sck > test->max_fd) test->max_fd = test->ctrl_sck;
