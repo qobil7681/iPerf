@@ -4457,6 +4457,7 @@ iperf_new_stream(struct iperf_test *test, int s, int sender)
         return NULL;
     }
     sp->pending_size = 0;
+    sp->thread_number = 0;
 
     /* Set socket */
     sp->socket = s;

@@ -183,7 +183,7 @@ iperf_udp_recv(struct iperf_stream *sp)
 	sp->jitter += (d - sp->jitter) / 16.0;
     }
     else {
-	if (sp->test->debug)
+	if (sp->test->debug_level >= DEBUG_LEVEL_DEBUG)
 	    printf("Late receive, state = %d\n", sp->test->state);
     }
 
